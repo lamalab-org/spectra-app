@@ -69,7 +69,7 @@ def create_question_bank() -> List[Question]:
     question_id = 1  # Start with ID 1 and increment for each question
 
     # Assume all JSON files follow the pattern "ms_{i}.json"
-    json_files = sorted(Path('.').glob("ms_*.json"))  # Adjust path as needed
+    json_files = sorted(Path('json_questions').glob("ms_*.json"))  # Adjust path as needed
 
     for i, json_file in enumerate(json_files, start=1):
         with open(json_file, 'r') as file:
