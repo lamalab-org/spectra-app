@@ -80,6 +80,23 @@ def create_question_bank() -> List[Question]:
             image_url_hard="test_img.png",
             spectrum_type="MS"
         ),
+        Question(
+            id=2,
+            question_easy="Identify the molecule with one halide from the easy spectrum shown.",
+            question_hard="In the hard spectrum image, determine the presence and type of halide(s) in the molecule.",
+            options=[
+                "There is one chlorine atom in the measured molecule",
+                "There is no chlorine or bromine atom in the measured molecule",
+                "There is one chlorine and one bromine atom in the measured molecule",
+                "There is one bromine atom in the measured molecule",
+            ],
+            correct_answer="There is one chlorine and one bromine atom in the measured molecule",
+            explanation="The isotope pattern reveals the presence of both chlorine and bromine, with characteristic ratios.",
+            category="Mass Spectrometry",
+            image_url_easy="test_img.png",
+            image_url_hard="test_img.png",
+            spectrum_type="MS"
+        ),
         # Add more questions as needed
     ]
 
@@ -100,7 +117,8 @@ class QuizApp:
             "start_time": None,
             "leaderboard_needs_update": False,
             "total_score": 0,
-            "total_questions": len(self.questions)
+            "total_questions": len(self.questions),
+            "question_answered": False  # Initialize question_answered
         }
         
         for key, value in defaults.items():
@@ -109,20 +127,21 @@ class QuizApp:
 
     def setup_page(self):
         st.set_page_config(
-            page_title="Quiz App", 
-            page_icon="🧪", 
+            page_title="Quiz App",
+            page_icon="🧪",
             layout="wide"
         )
-        # Custom CSS for better styling
+        # Custom CSS for styling radio buttons and labels
         st.markdown("""
         <style>
+        /* General styling for the page background and buttons */
         .main {
             background-color: #f0f2f6;
         }
         .stButton>button {
-            background-color: #4CAF50;
+            background-color: #7d10d2;
             color: white;
-            transition: all 0.3s ease;
+            transition: all 0.1s ease;
         }
         .stButton>button:hover {
             background-color: #45a049;
@@ -131,8 +150,26 @@ class QuizApp:
         h1, h2, h3, h4 {
             font-size: 1.5em !important;
         }
+        /* Custom CSS for larger and prettier radio buttons */
+        .stRadio div[role="radiogroup"] {
+            gap: 12px; /* Increase space between options */
+        }
+        .stRadio label {
+            font-size: 1.4em; /* Increase text size for labels */
+            display: flex;
+            align-items: center;
+            margin-bottom: 10px;
+        }
+        .stRadio input[type="radio"] {
+            width: 24px; /* Make the radio button larger */
+            height: 24px; /* Make the radio button larger */
+            margin-right: 15px; /* Add space between the button and text */
+            accent-color: #4CAF50; /* Change the color of the radio button when selected */
+        }
         </style>
         """, unsafe_allow_html=True)
+
+
 
     def run(self):
         # Enhanced navigation with more descriptive sidebar
@@ -199,9 +236,13 @@ class QuizApp:
         self.display_question(question)
 
     def display_question(self, question: Question):
-        st.markdown(f"**Question {st.session_state.current_question + 1}/{st.session_state.total_questions}**")
+        st.markdown(
+            f"<h1 style='font-size:128px; font-weight:bold;'>Question {st.session_state.current_question + 1}/{st.session_state.total_questions}</h1>",
+            unsafe_allow_html=True
+        )
         st.markdown(f"**Current Score:** {st.session_state.total_score} points")
         st.markdown("---")
+
         # Increase the text size using markdown headings
         st.markdown(
             f"#### {question.question_easy if st.session_state.quiz_mode == 'Easy' else question.question_hard}"
@@ -210,26 +251,40 @@ class QuizApp:
         image_url = question.image_url_easy if st.session_state.quiz_mode == "Easy" else question.image_url_hard
         if image_url:
             # Display the image with a smaller width
-            st.image(image_url, width=300, caption=f"{st.session_state.quiz_mode} Mode Spectrum")
+            st.image(image_url, width=1200, caption=f"{st.session_state.quiz_mode} Mode Spectrum")
 
         user_answer = st.radio("Select your answer:", question.options)
+        submitted = st.button("Submit Answer")
 
-        if st.button("Submit Answer"):
+        # Check if the question has already been answered
+        question_answered = "question_answered" in st.session_state and st.session_state.question_answered
+
+        if submitted and not question_answered:
+            # Process the answer if it has not been processed yet
             is_correct = user_answer == question.correct_answer
             time_taken = time.time() - st.session_state.start_time
-            
+
             if is_correct:
                 st.success("🎉 Correct! Great job!")
                 st.session_state.total_score += 1
             else:
                 st.error(f"❌ Incorrect. The correct answer was: {question.correct_answer}")
-            
+
             st.info(f"**Explanation:** {question.explanation}")
-            
+
+            # Save the quiz result
             self.save_quiz_result(question.id, user_answer, is_correct, time_taken)
-            st.session_state.current_question += 1
-            st.session_state.start_time = time.time()
-            st.rerun()
+
+            # Mark the question as answered
+            st.session_state.question_answered = True
+
+        # Add a "Next" button to move to the next question
+        if st.session_state.question_answered:
+            if st.button("Next"):
+                st.session_state.current_question += 1
+                st.session_state.start_time = time.time()
+                st.session_state.question_answered = False
+                st.rerun()
 
     def save_quiz_result(self, question_id: int, user_answer: str, is_correct: bool, time_taken: float):
         """
