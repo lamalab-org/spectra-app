@@ -88,8 +88,8 @@ def create_question_bank() -> List[Question]:
             explanation = "The isotope pattern reveals the presence of both chlorine and bromine, with characteristic ratios."
 
             # Image paths based on the given pattern
-            image_url_easy = f"easy_MS{i}.png"
-            image_url_hard = f"hard_MS{i}.png"
+            image_url_easy = f"easy/easy_MS{i}.png"
+            image_url_hard = f"hard/hard_MS{i}.png"
 
             # Add the question to the list
             questions.append(Question(
