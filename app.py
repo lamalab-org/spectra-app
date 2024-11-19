@@ -9,6 +9,9 @@ import time
 import logging
 from streamlit_autorefresh import st_autorefresh
 
+import json
+from pathlib import Path
+
 # Configure logging
 logging.basicConfig(level=logging.INFO)
 
@@ -62,43 +65,48 @@ class DatabaseManager:
             ''')
 
 def create_question_bank() -> List[Question]:
-    return [
-        Question(
-            id=1,
-            question_easy="Identify the molecule with one halide from the easy spectrum shown.",
-            question_hard="In the hard spectrum image, determine the presence and type of halide(s) in the molecule.",
-            options=[
-                "There is no chlorine or bromine atom in the measured molecule",
-                "There is one chlorine atom in the measured molecule",
-                "There is one bromine atom in the measured molecule",
-                "There is one chlorine and one bromine atom in the measured molecule"
-            ],
-            correct_answer="There is one chlorine and one bromine atom in the measured molecule",
-            explanation="The isotope pattern reveals the presence of both chlorine and bromine, with characteristic ratios.",
-            category="Mass Spectrometry",
-            image_url_easy="test_img.png",
-            image_url_hard="test_img.png",
-            spectrum_type="MS"
-        ),
-        Question(
-            id=2,
-            question_easy="Identify the molecule with one halide from the easy spectrum shown.",
-            question_hard="In the hard spectrum image, determine the presence and type of halide(s) in the molecule.",
-            options=[
-                "There is one chlorine atom in the measured molecule",
-                "There is no chlorine or bromine atom in the measured molecule",
-                "There is one chlorine and one bromine atom in the measured molecule",
-                "There is one bromine atom in the measured molecule",
-            ],
-            correct_answer="There is one chlorine and one bromine atom in the measured molecule",
-            explanation="The isotope pattern reveals the presence of both chlorine and bromine, with characteristic ratios.",
-            category="Mass Spectrometry",
-            image_url_easy="test_img.png",
-            image_url_hard="test_img.png",
-            spectrum_type="MS"
-        ),
-        # Add more questions as needed
-    ]
+    questions = []
+    question_id = 1  # Start with ID 1 and increment for each question
+
+    # Assume all JSON files follow the pattern "ms_{i}.json"
+    json_files = sorted(Path('.').glob("ms_*.json"))  # Adjust path as needed
+
+    for i, json_file in enumerate(json_files, start=1):
+        with open(json_file, 'r') as file:
+            data = json.load(file)
+            example = data['examples'][0]
+            # keep only last two sentences
+            example['input'] = example['input'].split('.')[-2] + '.' + example['input'].split('.')[-1]
+
+            # Extract question and options from the JSON
+            question_easy = example['input'].format(type1="easy spectrum", entry1="image")
+            question_hard = example['input'].format(type1="hard spectrum", entry1="image")
+            options = list(example['target_scores'].keys())
+            correct_answer = next(
+                answer for answer, score in example['target_scores'].items() if score == 1
+            )
+            explanation = "The isotope pattern reveals the presence of both chlorine and bromine, with characteristic ratios."
+
+            # Image paths based on the given pattern
+            image_url_easy = f"easy_MS{i}.png"
+            image_url_hard = f"hard_MS{i}.png"
+
+            # Add the question to the list
+            questions.append(Question(
+                id=question_id,
+                question_easy=question_easy,
+                question_hard=question_hard,
+                options=options,
+                correct_answer=correct_answer,
+                explanation=explanation,
+                category="Mass Spectrometry",
+                image_url_easy=image_url_easy,
+                image_url_hard=image_url_hard,
+                spectrum_type="MS"
+            ))
+            question_id += 1
+
+    return questions
 
 class QuizApp:
     def __init__(self):
@@ -387,9 +395,9 @@ class QuizApp:
 
         try:
             with self.db.get_connection() as conn:
-                # Fetch top 10 users ordered by total points
+                # Fetch top 10 users ordered by total points, excluding Quiz Attempts
                 df = pd.read_sql_query('''
-                    SELECT name, total_points, quiz_attempts
+                    SELECT name, total_points
                     FROM users
                     ORDER BY total_points DESC
                     LIMIT 10
@@ -399,7 +407,7 @@ class QuizApp:
                     st.info("No data available yet. Start playing to appear on the leaderboard!")
                 else:
                     # Rename columns for clarity
-                    df.columns = ['Player', 'Total Points', 'Quiz Attempts']
+                    df.columns = ['Player', 'Total Points']
                     
                     # Set index starting from 1
                     df.index += 1
