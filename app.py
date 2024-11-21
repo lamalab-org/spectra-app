@@ -40,6 +40,7 @@ class DatabaseManager:
     def init_database(self):
         with self.get_connection() as conn:
             c = conn.cursor()
+            # Create users table
             c.execute('''
                 CREATE TABLE IF NOT EXISTS users (
                     id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -49,6 +50,7 @@ class DatabaseManager:
                     quiz_attempts INTEGER DEFAULT 0
                 )
             ''')
+            # Create quiz_results table
             c.execute('''
                 CREATE TABLE IF NOT EXISTS quiz_results (
                     id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -61,10 +63,22 @@ class DatabaseManager:
                     FOREIGN KEY (user_id) REFERENCES users (id)
                 )
             ''')
+            # Create batch_state table
             c.execute('''
                 CREATE TABLE IF NOT EXISTS batch_state (
                     id INTEGER PRIMARY KEY CHECK (id = 1),
                     current_batch INTEGER DEFAULT 1
+                )
+            ''')
+            # Create quiz_sessions table
+            c.execute('''
+                CREATE TABLE IF NOT EXISTS quiz_sessions (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    user_id INTEGER,
+                    total_score INTEGER,
+                    total_time FLOAT,
+                    timestamp TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                    FOREIGN KEY (user_id) REFERENCES users (id)
                 )
             ''')
             # Initialize batch_state if not exists
@@ -153,6 +167,7 @@ class QuizApp:
             "selected_questions": [],  # Store selected questions
             "questions_per_batch": 5,  # Number of questions per batch
             "current_batch": 1,  # Keep track of current batch
+            "quiz_start_time": None,
         }
 
         for key, value in defaults.items():
@@ -265,11 +280,21 @@ class QuizApp:
             self.show_leaderboard()
 
     def show_quiz_page(self):
+        """
+        Display the quiz page and handle user input for starting the quiz or answering questions.
+        """
         if not st.session_state.quiz_started:
+            # Display the quiz welcome page
             st.header("🧪 Willkommen zum Quiz")
             with st.form(key='quiz_form'):
-                new_name = st.text_input("Geben Sie Ihren Namen ein", help="Wähle einen eindeutigen Namen für das Leaderboard", max_chars=20)
-                # Mode selection with explanatory text
+                # Input field for user name
+                new_name = st.text_input(
+                    "Geben Sie Ihren Namen ein", 
+                    help="Wähle einen eindeutigen Namen für das Leaderboard", 
+                    max_chars=20
+                )
+
+                # Quiz mode selection
                 st.session_state.quiz_mode = st.radio(
                     "Quiz-Modus auswählen:",
                     ["Einfacher", "Schwerer"],
@@ -277,29 +302,35 @@ class QuizApp:
                     index=["Einfacher", "Schwerer"].index(st.session_state.quiz_mode),
                     key="quiz_mode_radio"
                 )
-                # Submit button for the form
+
+                # Submit button to start the quiz
                 submitted = st.form_submit_button("Quiz starten")
                 if submitted:
+                    # Validate user name
                     if len(new_name.strip()) < 3:
                         st.error("Der Name muss mindestens 3 Zeichen lang sein.")
                     else:
                         try:
+                            # Register the user
                             if self.register_user(new_name.strip()):
                                 st.success("Registrierung erfolgreich! Lass uns mit dem Quiz beginnen.")
                                 st.session_state.user_id = self.get_user_id(new_name.strip())
                                 st.session_state.quiz_started = True
-                                st.session_state.start_time = time.time()
+                                st.session_state.quiz_start_time = time.time()  # Set quiz start time
+                                st.session_state.start_time = time.time()  # For individual question timing
                                 st.session_state.current_question = 0
                                 st.session_state.total_score = 0
-                                # Select new questions based on the batch
+                                # Select questions for the current batch
                                 self.select_questions()
-                                st.rerun()
+                                st.rerun()  # Refresh the page to start the quiz
                             else:
                                 st.error("Dieser Name ist bereits vergeben. Bitte wähle einen anderen Namen.")
                         except Exception as e:
                             st.error(f"Registrierung fehlgeschlagen: {str(e)}")
         else:
+            # If the quiz has started, run the quiz logic
             self.run_quiz()
+
 
     def select_questions(self):
         """
@@ -337,13 +368,18 @@ class QuizApp:
             next_batch = 1  # Wrap around to the first batch
 
         self.db.update_current_batch(next_batch)
-
+    
     def run_quiz(self):
         if st.session_state.current_question >= st.session_state.questions_per_batch:
             # Quiz completion screen
             st.balloons()
             st.success(f"🎉 Quiz abgeschlossen! Deine Endpunktzahl: {st.session_state.total_score} Punkte")
             st.session_state.leaderboard_needs_update = True
+
+            # Calculate total time taken
+            total_time = time.time() - st.session_state.quiz_start_time
+            # Save the quiz session with total time
+            self.save_quiz_session(st.session_state.total_score, total_time)
 
             if st.button("Neues Quiz starten"):
                 self.reset_quiz()
@@ -352,6 +388,28 @@ class QuizApp:
         question_index = st.session_state.current_question
         question = st.session_state.selected_questions[question_index]
         self.display_question(question)
+    
+    def format_time(self, seconds):
+        """
+        Format time from seconds to MM:SS format
+        """
+        minutes = int(seconds) // 60
+        sec = int(seconds) % 60
+        return f"{minutes:02d}:{sec:02d}"
+    
+    def reset_quiz(self):
+        """
+        Reset the quiz session state for a new quiz.
+        """
+        # Reset all session state variables
+        st.session_state.quiz_started = False
+        st.session_state.current_question = 0
+        st.session_state.start_time = None
+        st.session_state.quiz_start_time = None  # Reset quiz start time
+        st.session_state.total_score = 0
+        st.session_state.question_answered = False
+        st.session_state.selected_questions = []
+
 
     def display_question(self, question: Question):
         # Add custom HTML and CSS for the question background with dynamic size
@@ -465,29 +523,59 @@ class QuizApp:
             logging.error(f"Datenbankfehler beim Speichern des Quiz-Ergebnisses: {e}")
             st.error("Ein Fehler ist aufgetreten, während Ihr Quiz-Ergebnis gespeichert wurde.")
 
+    def save_quiz_session(self, total_score: int, total_time: float):
+        """
+        Save the quiz session with total score and total time.
+        """
+        if not st.session_state.user_id:
+            st.error("Benutzer nicht registriert. Quiz-Sitzung kann nicht gespeichert werden.")
+            return
+
+        try:
+            with self.db.get_connection() as conn:
+                c = conn.cursor()
+                # Save a new row for this quiz session
+                c.execute('''
+                    INSERT INTO quiz_sessions
+                    (user_id, total_score, total_time, timestamp)
+                    VALUES (?, ?, ?, ?)
+                ''', (
+                    st.session_state.user_id,
+                    total_score,
+                    total_time,
+                    datetime.now()
+                ))
+                conn.commit()
+        except sqlite3.Error as e:
+            logging.error(f"Datenbankfehler beim Speichern der Quiz-Sitzung: {e}")
+            st.error("Ein Fehler ist aufgetreten, während Ihre Quiz-Sitzung gespeichert wurde.")
+
     def register_user(self, name: str) -> bool:
         """
-        Registrieren Sie einen neuen Benutzer in der Datenbank
+        Register a new user in the database. Prevent duplicate names.
         """
         if not name:
+            st.error("Bitte geben Sie einen Namen ein.")
             return False
 
         try:
             with self.db.get_connection() as conn:
                 c = conn.cursor()
-                # Use INSERT OR IGNORE to prevent duplicate entries
-                c.execute('INSERT OR IGNORE INTO users (name) VALUES (?)', (name,))
-
-                # Check if a row was actually inserted
-                if c.rowcount > 0:
-                    conn.commit()
-                    return True
-                else:
-                    # Name already exists
+                # Check if the name already exists
+                c.execute('SELECT id FROM users WHERE name = ?', (name,))
+                if c.fetchone():
+                    st.error("Dieser Name ist bereits vergeben. Bitte wählen Sie einen anderen Namen.")
                     return False
-        except sqlite3.IntegrityError:
-            logging.error(f"Registrierung des Benutzers fehlgeschlagen: {name}")
+
+                # Insert new user
+                c.execute('INSERT INTO users (name) VALUES (?)', (name,))
+                conn.commit()
+                return True
+        except sqlite3.Error as e:
+            logging.error(f"Registrierung des Benutzers fehlgeschlagen: {name}, Fehler: {e}")
+            st.error("Ein Fehler ist aufgetreten, während der Benutzer registriert wurde.")
             return False
+
 
     def get_user_id(self, name: str) -> Optional[int]:
         """
@@ -502,46 +590,31 @@ class QuizApp:
         except sqlite3.Error as e:
             logging.error(f"Fehler beim Abrufen der Benutzer-ID: {e}")
             return None
-
-    def reset_quiz(self):
-        """
-        Setzen Sie den Quiz-Zustand auf seine ursprüngliche Konfiguration zurück
-        """
-        # Reset all session state variables
-        st.session_state.quiz_started = False
-        st.session_state.user_id = None
-        st.session_state.current_question = 0
-        st.session_state.start_time = None
-        st.session_state.leaderboard_needs_update = False
-        st.session_state.total_score = 0
-        st.session_state.question_answered = False
-        st.session_state.selected_questions = []
-        st.session_state.current_batch = 1
-
+        
     def show_leaderboard(self):
         """
-        Leaderboard anzeigen
+        Display the leaderboard with unique entries per user.
         """
         st.title("🏆 Leaderboard")
 
-        # Add an auto-refresh every 5 seconds
-        count = st_autorefresh(interval=5000, limit=None, key="leaderboard_autorefresh")
-
         try:
             with self.db.get_connection() as conn:
-                # Fetch top 10 users ordered by total points, excluding Quiz Attempts
+                # Fetch leaderboard data (latest session or best score per user)
                 df = pd.read_sql_query('''
-                    SELECT name, total_points
-                    FROM users
-                    ORDER BY total_points DESC
-                    LIMIT 10
+                    SELECT u.name AS Spieler, 
+                        MAX(qs.total_score) AS Gesamtpunkte, 
+                        MIN(qs.total_time) AS Gesamtzeit
+                    FROM quiz_sessions qs
+                    JOIN users u ON qs.user_id = u.id
+                    GROUP BY qs.user_id
+                    ORDER BY Gesamtpunkte DESC, Gesamtzeit ASC;
                 ''', conn)
 
                 if df.empty:
                     st.info("Noch keine Daten verfügbar. Beginnen Sie zu spielen, um auf der Leaderboard zu erscheinen!")
                 else:
-                    # Rename columns for clarity
-                    df.columns = ['Spieler', 'Gesamtpunkte']
+                    # Format the total time from seconds to MM:SS
+                    df['Gesamtzeit'] = df['Gesamtzeit'].apply(lambda x: self.format_time(x))
 
                     # Set index starting from 1
                     df.index += 1
@@ -549,24 +622,9 @@ class QuizApp:
                     # Display leaderboard with styling
                     st.table(df)
 
-                    # Optional: Visualize top performers
-                    fig = go.Figure(data=[go.Bar(
-                        x=df['Spieler'], 
-                        y=df['Gesamtpunkte'], 
-                        text=df['Gesamtpunkte'],
-                        textposition='auto',
-                    )])
-                    fig.update_layout(
-                        title='Top-Spieler',
-                        xaxis_title='Spieler',
-                        yaxis_title='Gesamtpunkte',
-                        font=dict(size=12)  # Adjust font size in the plot here
-                    )
-                    st.plotly_chart(fig)
-
         except sqlite3.Error as e:
             logging.error(f"Fehler beim Abrufen der Leaderboard: {e}")
-            st.error("Leaderboardn-Daten können nicht abgerufen werden.")
+            st.error("Leaderboard-Daten können nicht abgerufen werden.")
 
 def main():
     quiz_app = QuizApp()
