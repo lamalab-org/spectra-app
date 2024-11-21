@@ -17,7 +17,7 @@
     "output_regex": "[-+]?\\d+",
     "examples": [
         {
-            "input": "In {type1} one can see a section of a mass spectrum of an organic molecule {entry1}. The section shows the molecule ion peak and the isotope peaks. How many and which halides are in the molecule?",
+            "input": "In {type1} one can see a section of a mass spectrum of an organic molecule {entry1}. Der Abschnitt des Massenspektrums zeigt den Molpeak und die Isotopenpeaks. Wie viele und welche Halogenide sind in dem Molekül?",
             "qentries_modality": {
                 "image": {
                     "type1": {
@@ -35,10 +35,10 @@
                 "image"
             ],
             "target_scores": {
-                "There is no chlorine or bromine atom in the measured molecule": 1,
-                "There is one chlorine atom in the measured molecule": 0,
-                "There is one bromine atom in the measured molecule": 0,
-                "There is one chlorine and one bromine atom in the measured molecule": 0
+                "Im gemessenen Molekül ist kein Chlor- oder Bromatom vorhanden": 1,
+                "Im gemessenen Molekül befindet sich ein Chloratom": 0,
+                "Im gemessenen Molekül befindet sich ein Bromatom": 0,
+                "Im gemessenen Molekül gibt es ein Chlor- und ein Bromatom": 0
             }
         }
     ]

@@ -268,11 +268,11 @@ class QuizApp:
         if not st.session_state.quiz_started:
             st.header("🧪 Willkommen zum Quiz")
             with st.form(key='quiz_form'):
-                new_name = st.text_input("Geben Sie Ihren Namen ein", help="Wählen Sie einen eindeutigen Namen für die Leaderboard", max_chars=20)
+                new_name = st.text_input("Geben Sie Ihren Namen ein", help="Wähle einen eindeutigen Namen für das Leaderboard", max_chars=20)
                 # Mode selection with explanatory text
                 st.session_state.quiz_mode = st.radio(
                     "Quiz-Modus auswählen:",
-                    ["Einfach", "Schwer"],
+                    ["Einfacher", "Schwerer"],
                     format_func=lambda x: f"{x} Modus",
                     index=["Einfach", "Schwer"].index(st.session_state.quiz_mode),
                     key="quiz_mode_radio"
@@ -285,7 +285,7 @@ class QuizApp:
                     else:
                         try:
                             if self.register_user(new_name.strip()):
-                                st.success("Registrierung erfolgreich! Lassen Sie uns mit dem Quiz beginnen.")
+                                st.success("Registrierung erfolgreich! Lass uns mit dem Quiz beginnen.")
                                 st.session_state.user_id = self.get_user_id(new_name.strip())
                                 st.session_state.quiz_started = True
                                 st.session_state.start_time = time.time()
@@ -295,7 +295,7 @@ class QuizApp:
                                 self.select_questions()
                                 st.rerun()
                             else:
-                                st.error("Dieser Name ist bereits vergeben. Bitte wählen Sie einen anderen.")
+                                st.error("Dieser Name ist bereits vergeben. Bitte wähle einen anderen Namen.")
                         except Exception as e:
                             st.error(f"Registrierung fehlgeschlagen: {str(e)}")
         else:
@@ -342,7 +342,7 @@ class QuizApp:
         if st.session_state.current_question >= st.session_state.questions_per_batch:
             # Quiz completion screen
             st.balloons()
-            st.success(f"🎉 Quiz abgeschlossen! Ihre Endpunktzahl: {st.session_state.total_score} Punkte")
+            st.success(f"🎉 Quiz abgeschlossen! Deine Endpunktzahl: {st.session_state.total_score} Punkte")
             st.session_state.leaderboard_needs_update = True
 
             if st.button("Neues Quiz starten"):
