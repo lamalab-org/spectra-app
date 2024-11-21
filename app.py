@@ -144,7 +144,7 @@ class QuizApp:
         defaults = {
             "current_question": 0,
             "user_id": None,
-            "quiz_mode": "Einfach",
+            "quiz_mode": "Einfacher",
             "quiz_started": False,
             "start_time": None,
             "leaderboard_needs_update": False,
@@ -274,7 +274,7 @@ class QuizApp:
                     "Quiz-Modus auswählen:",
                     ["Einfacher", "Schwerer"],
                     format_func=lambda x: f"{x} Modus",
-                    index=["Einfach", "Schwer"].index(st.session_state.quiz_mode),
+                    index=["Einfacher", "Schwerer"].index(st.session_state.quiz_mode),
                     key="quiz_mode_radio"
                 )
                 # Submit button for the form
@@ -384,12 +384,12 @@ class QuizApp:
         st.markdown(
             f"""
             <div class="question-container">
-                <p>{question.question_easy if st.session_state.quiz_mode == 'Einfach' else question.question_hard}</p>
+                <p>{question.question_easy if st.session_state.quiz_mode == 'Einfacher' else question.question_hard}</p>
             </div>
             """, unsafe_allow_html=True
         )
 
-        image_url = question.image_url_easy if st.session_state.quiz_mode == "Einfach" else question.image_url_hard
+        image_url = question.image_url_easy if st.session_state.quiz_mode == "Einfacher" else question.image_url_hard
         if image_url:
             # Display the image and ensure it adjusts to screen width
             st.image(image_url, use_container_width=True, caption=f"{st.session_state.quiz_mode} Modus Spektrum")
