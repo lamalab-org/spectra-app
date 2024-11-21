@@ -1,0 +1,5 @@
+python==3.12
+streamlit
+streamlit_autorefresh
+plotly
+watchdog

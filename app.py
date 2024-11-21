@@ -22,7 +22,6 @@ class Question:
     question_hard: str
     options: List[str]
     correct_answer: str
-    explanation: str
     category: str
     image_url_easy: Optional[str] = None
     image_url_hard: Optional[str] = None
@@ -59,10 +58,31 @@ class DatabaseManager:
                     is_correct BOOLEAN,
                     time_taken FLOAT,
                     timestamp TIMESTAMP,
-                    FOREIGN KEY (user_id) REFERENCES users (id),
-                    UNIQUE (user_id, question_id)
+                    FOREIGN KEY (user_id) REFERENCES users (id)
                 )
             ''')
+            c.execute('''
+                CREATE TABLE IF NOT EXISTS batch_state (
+                    id INTEGER PRIMARY KEY CHECK (id = 1),
+                    current_batch INTEGER DEFAULT 1
+                )
+            ''')
+            # Initialize batch_state if not exists
+            c.execute('INSERT OR IGNORE INTO batch_state (id, current_batch) VALUES (1, 1)')
+            conn.commit()
+
+    def get_current_batch(self):
+        with self.get_connection() as conn:
+            c = conn.cursor()
+            c.execute('SELECT current_batch FROM batch_state WHERE id = 1')
+            result = c.fetchone()
+            return result[0] if result else 1
+
+    def update_current_batch(self, next_batch):
+        with self.get_connection() as conn:
+            c = conn.cursor()
+            c.execute('UPDATE batch_state SET current_batch = ? WHERE id = 1', (next_batch,))
+            conn.commit()
 
 def create_question_bank() -> List[Question]:
     questions = []
@@ -75,8 +95,8 @@ def create_question_bank() -> List[Question]:
         with open(json_file, 'r') as file:
             data = json.load(file)
             example = data['examples'][0]
-            # keep only last two sentences
-            example['input'] = example['input'].split('.')[-2] + '.' + example['input'].split('.')[-1]
+            # Keep only the last two sentences
+            example['input'] = '.'.join(example['input'].split('.')[-2:])
 
             # Extract question and options from the JSON
             question_easy = example['input'].format(type1="easy spectrum", entry1="image")
@@ -85,7 +105,6 @@ def create_question_bank() -> List[Question]:
             correct_answer = next(
                 answer for answer, score in example['target_scores'].items() if score == 1
             )
-            explanation = "The isotope pattern reveals the presence of both chlorine and bromine, with characteristic ratios."
 
             # Image paths based on the given pattern
             image_url_easy = f"easy/easy_MS{i}.png"
@@ -98,7 +117,6 @@ def create_question_bank() -> List[Question]:
                 question_hard=question_hard,
                 options=options,
                 correct_answer=correct_answer,
-                explanation=explanation,
                 category="Mass Spectrometry",
                 image_url_easy=image_url_easy,
                 image_url_hard=image_url_hard,
@@ -125,10 +143,12 @@ class QuizApp:
             "start_time": None,
             "leaderboard_needs_update": False,
             "total_score": 0,
-            "total_questions": len(self.questions),
-            "question_answered": False  # Initialize question_answered
+            "question_answered": False,  # Initialize question_answered
+            "selected_questions": [],  # Store selected questions
+            "questions_per_batch": 5,  # Number of questions per batch
+            "current_batch": 1,  # Keep track of current batch
         }
-        
+
         for key, value in defaults.items():
             if key not in st.session_state:
                 st.session_state[key] = value
@@ -139,9 +159,19 @@ class QuizApp:
             page_icon="🧪",
             layout="wide"
         )
-        # Custom CSS for styling radio buttons and labels
+        # Custom CSS for styling
         st.markdown("""
         <style>
+        /* Adjust the sidebar width */
+        [data-testid="stSidebar"] {
+            width: 15rem; /* Adjust the sidebar width here */
+        }
+        [data-testid="stSidebar"][aria-expanded="true"] > div:first-child {
+            width: 15rem; /* Ensure the expanded sidebar has the same width */
+        }
+        [data-testid="stSidebar"][aria-expanded="false"] {
+            width: 0; /* When collapsed, hide the sidebar */
+        }
         /* General styling for the page background and buttons */
         .main {
             background-color: #f0f2f6;
@@ -150,34 +180,68 @@ class QuizApp:
             background-color: #7d10d2;
             color: white;
             transition: all 0.1s ease;
+            font-size: 1.05em; /* Adjust button text size here */
+            padding: 0.2em 0.4em; /* Adjust button padding here */
+            /* Allow the button to adjust to text size */
+            width: auto;
+            height: auto;
         }
         .stButton>button:hover {
             background-color: #45a049;
             transform: scale(1.05);
         }
-        h1, h2, h3, h4 {
-            font-size: 1.5em !important;
+        /* Adjust heading sizes here */
+        h1, h2, h3, h4, h5, h6 {
+            font-size: 1.6em !important;
         }
-        /* Custom CSS for larger and prettier radio buttons */
+        /* Adjust general text sizes here */
+        p, div, label, input, textarea, select, button {
+            font-size: 1.01em !important;
+        }
+        /* Custom CSS for radio buttons */
         .stRadio div[role="radiogroup"] {
-            gap: 12px; /* Increase space between options */
+            gap: 8px; /* Adjust space between options */
         }
         .stRadio label {
-            font-size: 1.4em; /* Increase text size for labels */
-            display: flex;
-            align-items: center;
-            margin-bottom: 10px;
+            display: flex; /* Use flexbox for alignment */
+            align-items: center; /* Align the radio button and text vertically */
+            font-size: 1.1em; /* Adjust text size */
+            gap: 0.5em; /* Space between the radio button and text */
         }
         .stRadio input[type="radio"] {
-            width: 24px; /* Make the radio button larger */
-            height: 24px; /* Make the radio button larger */
-            margin-right: 15px; /* Add space between the button and text */
-            accent-color: #4CAF50; /* Change the color of the radio button when selected */
+            width: 1.2em; /* Adjust width to scale with text size (relative unit) */
+            height: 1.2em; /* Adjust height to scale with text size */
+            margin-right: 10px; /* Space between the radio button and the label text */
+            accent-color: #4CAF50; /* Color of the radio button when selected */
+            vertical-align: middle; /* Align the radio button with the text */
+        }
+        /* Make images responsive */
+        img {
+            max-width: 100%;
+            height: auto;
+        }
+        /* Adjust input boxes to fit text */
+        .stTextInput>div>div>input {
+            font-size: 1.05em !important;
+            padding: 0.5em;
+        }
+        /* Ensure containers adjust to content */
+        .css-1l269bu .css-1v3fvcr {
+            flex: 1 1 auto;
+            width: auto;
+            max-width: 100%;
+        }
+        /* Make the sidebar adjustable */
+        @media (max-width: 768px) {
+            [data-testid="stSidebar"] {
+                width: 12rem; /* Narrower sidebar on smaller screens */
+            }
+            [data-testid="stSidebar"][aria-expanded="true"] > div:first-child {
+                width: 12rem;
+            }
         }
         </style>
         """, unsafe_allow_html=True)
-
-
 
     def run(self):
         # Enhanced navigation with more descriptive sidebar
@@ -221,6 +285,8 @@ class QuizApp:
                                 st.session_state.start_time = time.time()
                                 st.session_state.current_question = 0
                                 st.session_state.total_score = 0
+                                # Select new questions based on the batch
+                                self.select_questions()
                                 st.rerun()
                             else:
                                 st.error("This name is already taken. Please choose another.")
@@ -229,37 +295,98 @@ class QuizApp:
         else:
             self.run_quiz()
 
+    def select_questions(self):
+        """
+        Select questions for the quiz based on the current batch and store them in session state.
+        """
+        # Get current batch from the database
+        current_batch = self.db.get_current_batch()
+        st.session_state.current_batch = current_batch
+
+        # Determine total number of batches
+        total_questions = len(self.questions)
+        questions_per_batch = st.session_state.questions_per_batch
+        total_batches = total_questions // questions_per_batch
+        if total_questions % questions_per_batch != 0:
+            total_batches += 1
+
+        # Get the indices for the current batch
+        start_index = (current_batch - 1) * questions_per_batch
+        end_index = start_index + questions_per_batch
+        selected = self.questions[start_index:end_index]
+
+        # If we reach the end, wrap around
+        if not selected:
+            # Reset to the first batch
+            st.session_state.current_batch = 1
+            start_index = 0
+            end_index = questions_per_batch
+            selected = self.questions[start_index:end_index]
+
+        st.session_state.selected_questions = selected
+
+        # Update the current batch for the next user
+        next_batch = current_batch + 1
+        if next_batch > total_batches:
+            next_batch = 1  # Wrap around to the first batch
+
+        self.db.update_current_batch(next_batch)
+
     def run_quiz(self):
-        if st.session_state.current_question >= len(self.questions):
+        if st.session_state.current_question >= st.session_state.questions_per_batch:
             # Quiz completion screen
             st.balloons()
             st.success(f"🎉 Quiz completed! Your final score: {st.session_state.total_score} points")
             st.session_state.leaderboard_needs_update = True
-            
+
             if st.button("Start a New Quiz"):
                 self.reset_quiz()
             return
 
-        question = self.questions[st.session_state.current_question]
+        question_index = st.session_state.current_question
+        question = st.session_state.selected_questions[question_index]
         self.display_question(question)
 
     def display_question(self, question: Question):
+        # Add custom HTML and CSS for the question background with dynamic size
         st.markdown(
-            f"<h1 style='font-size:128px; font-weight:bold;'>Question {st.session_state.current_question + 1}/{st.session_state.total_questions}</h1>",
+            """
+            <style>
+            .question-container {
+                background-color: #f9f9fc;
+                border: 2px solid #e0e0eb;
+                border-radius: 10px;
+                padding: 12px;
+                box-shadow: 0 4px 8px rgba(0, 0, 0, 0.1);
+                margin-bottom: 12px;
+                display: inline-block;
+                width: 100%;  /* Adjust to full width */
+                word-wrap: break-word;
+            }
+            </style>
+            """, unsafe_allow_html=True
+        )
+
+        st.markdown(
+            f"<h2 style='font-size:1.2em; font-weight:bold;'>Question {st.session_state.current_question + 1}/{st.session_state.questions_per_batch}</h2>",
             unsafe_allow_html=True
         )
-        st.markdown(f"**Current Score:** {st.session_state.total_score} points")
+        st.markdown(f"<h4>Current Score: {st.session_state.total_score} points</h4>", unsafe_allow_html=True)
         st.markdown("---")
 
-        # Increase the text size using markdown headings
+        # Wrap the question in the styled div
         st.markdown(
-            f"#### {question.question_easy if st.session_state.quiz_mode == 'Easy' else question.question_hard}"
+            f"""
+            <div class="question-container">
+                <p>{question.question_easy if st.session_state.quiz_mode == 'Easy' else question.question_hard}</p>
+            </div>
+            """, unsafe_allow_html=True
         )
 
         image_url = question.image_url_easy if st.session_state.quiz_mode == "Easy" else question.image_url_hard
         if image_url:
-            # Display the image with a smaller width
-            st.image(image_url, width=1200, caption=f"{st.session_state.quiz_mode} Mode Spectrum")
+            # Display the image and ensure it adjusts to screen width
+            st.image(image_url, use_column_width=True, caption=f"{st.session_state.quiz_mode} Mode Spectrum")
 
         user_answer = st.radio("Select your answer:", question.options)
         submitted = st.button("Submit Answer")
@@ -277,8 +404,6 @@ class QuizApp:
                 st.session_state.total_score += 1
             else:
                 st.error(f"❌ Incorrect. The correct answer was: {question.correct_answer}")
-
-            st.info(f"**Explanation:** {question.explanation}")
 
             # Save the quiz result
             self.save_quiz_result(question.id, user_answer, is_correct, time_taken)
@@ -305,8 +430,8 @@ class QuizApp:
         try:
             with self.db.get_connection() as conn:
                 c = conn.cursor()
-                
-                # Insert quiz result
+
+                # Insert quiz result with timestamp to allow multiple attempts
                 c.execute('''
                     INSERT INTO quiz_results 
                     (user_id, question_id, user_answer, is_correct, time_taken, timestamp)
@@ -319,7 +444,7 @@ class QuizApp:
                     time_taken, 
                     datetime.now()
                 ))
-                
+
                 # Update user points and attempts
                 points = 1 if is_correct else 0
                 c.execute('''
@@ -328,7 +453,7 @@ class QuizApp:
                         quiz_attempts = quiz_attempts + 1
                     WHERE id = ?
                 ''', (points, st.session_state.user_id))
-                
+
                 conn.commit()
         except sqlite3.Error as e:
             logging.error(f"Database error when saving quiz result: {e}")
@@ -346,7 +471,7 @@ class QuizApp:
                 c = conn.cursor()
                 # Use INSERT OR IGNORE to prevent duplicate entries
                 c.execute('INSERT OR IGNORE INTO users (name) VALUES (?)', (name,))
-                
+
                 # Check if a row was actually inserted
                 if c.rowcount > 0:
                     conn.commit()
@@ -383,6 +508,9 @@ class QuizApp:
         st.session_state.start_time = None
         st.session_state.leaderboard_needs_update = False
         st.session_state.total_score = 0
+        st.session_state.question_answered = False
+        st.session_state.selected_questions = []
+        st.session_state.current_batch = 1
 
     def show_leaderboard(self):
         """
@@ -402,19 +530,19 @@ class QuizApp:
                     ORDER BY total_points DESC
                     LIMIT 10
                 ''', conn)
-                
+
                 if df.empty:
                     st.info("No data available yet. Start playing to appear on the leaderboard!")
                 else:
                     # Rename columns for clarity
                     df.columns = ['Player', 'Total Points']
-                    
+
                     # Set index starting from 1
                     df.index += 1
-                    
+
                     # Display leaderboard with styling
                     st.table(df)
-                    
+
                     # Optional: Visualize top performers
                     fig = go.Figure(data=[go.Bar(
                         x=df['Player'], 
@@ -425,10 +553,11 @@ class QuizApp:
                     fig.update_layout(
                         title='Top Performers',
                         xaxis_title='Players',
-                        yaxis_title='Total Points'
+                        yaxis_title='Total Points',
+                        font=dict(size=12)  # Adjust font size in the plot here
                     )
                     st.plotly_chart(fig)
-        
+
         except sqlite3.Error as e:
             logging.error(f"Error fetching leaderboard: {e}")
             st.error("Unable to retrieve leaderboard data.")
