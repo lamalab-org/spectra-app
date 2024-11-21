@@ -88,10 +88,15 @@ def create_question_bank() -> List[Question]:
     questions = []
     question_id = 1  # Start with ID 1 and increment for each question
 
-    # Assume all JSON files follow the pattern "ms_{i}.json"
+    # Get the list of JSON files and PNG files
     json_files = sorted(Path('json_questions').glob("ms_*.json"))  # Adjust path as needed
+    easy_images = sorted(Path('easy').glob("easy_MS*.png"))  # Adjust path as needed
+    hard_images = sorted(Path('hard').glob("hard_MS*.png"))  # Adjust path as needed
+    # Ensure we have the same number of JSON files and image files
+    if len(json_files) != len(easy_images) or len(json_files) != len(hard_images):
+        raise ValueError("Mismatch between the number of JSON files and image files. Please ensure they match.")
 
-    for i, json_file in enumerate(json_files, start=1):
+    for json_file, easy_image, hard_image in zip(json_files, easy_images, hard_images):
         with open(json_file, 'r') as file:
             data = json.load(file)
             example = data['examples'][0]
@@ -106,9 +111,9 @@ def create_question_bank() -> List[Question]:
                 answer for answer, score in example['target_scores'].items() if score == 1
             )
 
-            # Image paths based on the given pattern
-            image_url_easy = f"easy/easy_MS{i}.png"
-            image_url_hard = f"hard/hard_MS{i}.png"
+            # Map the images dynamically
+            image_url_easy = str(easy_image)
+            image_url_hard = str(hard_image)
 
             # Add the question to the list
             questions.append(Question(
@@ -125,6 +130,7 @@ def create_question_bank() -> List[Question]:
             question_id += 1
 
     return questions
+
 
 class QuizApp:
     def __init__(self):
@@ -267,7 +273,7 @@ class QuizApp:
                 st.session_state.quiz_mode = st.radio(
                     "Select Quiz Mode:",
                     ["Easy", "Hard"],
-                    format_func=lambda x: f"{x} Mode - {'For Children' if x == 'Easy' else 'For Adults'}",
+                    format_func=lambda x: f"{x} Mode",
                     index=["Easy", "Hard"].index(st.session_state.quiz_mode),
                     key="quiz_mode_radio"
                 )
