@@ -144,7 +144,7 @@ class QuizApp:
         defaults = {
             "current_question": 0,
             "user_id": None,
-            "quiz_mode": "Hard",
+            "quiz_mode": "Einfach",
             "quiz_started": False,
             "start_time": None,
             "leaderboard_needs_update": False,
@@ -253,7 +253,7 @@ class QuizApp:
         # Enhanced navigation with more descriptive sidebar
         st.sidebar.title("🔬 Quiz Navigation")
         page = st.sidebar.radio(
-            "Navigate", 
+            "Navigieren", 
             ["Quiz", "Leaderboard"], 
             index=0
         )
@@ -266,26 +266,26 @@ class QuizApp:
 
     def show_quiz_page(self):
         if not st.session_state.quiz_started:
-            st.header("🧪 Welcome to the Quiz")
+            st.header("🧪 Willkommen zum Quiz")
             with st.form(key='quiz_form'):
-                new_name = st.text_input("Enter Your Name", help="Choose a unique name for the leaderboard", max_chars=20)
+                new_name = st.text_input("Geben Sie Ihren Namen ein", help="Wählen Sie einen eindeutigen Namen für die Leaderboard", max_chars=20)
                 # Mode selection with explanatory text
                 st.session_state.quiz_mode = st.radio(
-                    "Select Quiz Mode:",
-                    ["Easy", "Hard"],
-                    format_func=lambda x: f"{x} Mode",
-                    index=["Easy", "Hard"].index(st.session_state.quiz_mode),
+                    "Quiz-Modus auswählen:",
+                    ["Einfach", "Schwer"],
+                    format_func=lambda x: f"{x} Modus",
+                    index=["Einfach", "Schwer"].index(st.session_state.quiz_mode),
                     key="quiz_mode_radio"
                 )
                 # Submit button for the form
-                submitted = st.form_submit_button("Start Quiz")
+                submitted = st.form_submit_button("Quiz starten")
                 if submitted:
                     if len(new_name.strip()) < 3:
-                        st.error("Name must be at least 3 characters long.")
+                        st.error("Der Name muss mindestens 3 Zeichen lang sein.")
                     else:
                         try:
                             if self.register_user(new_name.strip()):
-                                st.success("Registration successful! Let's begin the quiz.")
+                                st.success("Registrierung erfolgreich! Lassen Sie uns mit dem Quiz beginnen.")
                                 st.session_state.user_id = self.get_user_id(new_name.strip())
                                 st.session_state.quiz_started = True
                                 st.session_state.start_time = time.time()
@@ -295,15 +295,15 @@ class QuizApp:
                                 self.select_questions()
                                 st.rerun()
                             else:
-                                st.error("This name is already taken. Please choose another.")
+                                st.error("Dieser Name ist bereits vergeben. Bitte wählen Sie einen anderen.")
                         except Exception as e:
-                            st.error(f"Registration failed: {str(e)}")
+                            st.error(f"Registrierung fehlgeschlagen: {str(e)}")
         else:
             self.run_quiz()
 
     def select_questions(self):
         """
-        Select questions for the quiz based on the current batch and store them in session state.
+        Wählen Sie Fragen für das Quiz basierend auf dem aktuellen Batch aus und speichern Sie sie im Sitzungszustand.
         """
         # Get current batch from the database
         current_batch = self.db.get_current_batch()
@@ -342,10 +342,10 @@ class QuizApp:
         if st.session_state.current_question >= st.session_state.questions_per_batch:
             # Quiz completion screen
             st.balloons()
-            st.success(f"🎉 Quiz completed! Your final score: {st.session_state.total_score} points")
+            st.success(f"🎉 Quiz abgeschlossen! Ihre Endpunktzahl: {st.session_state.total_score} Punkte")
             st.session_state.leaderboard_needs_update = True
 
-            if st.button("Start a New Quiz"):
+            if st.button("Neues Quiz starten"):
                 self.reset_quiz()
             return
 
@@ -374,28 +374,28 @@ class QuizApp:
         )
 
         st.markdown(
-            f"<h2 style='font-size:1.2em; font-weight:bold;'>Question {st.session_state.current_question + 1}/{st.session_state.questions_per_batch}</h2>",
+            f"<h2 style='font-size:1.2em; font-weight:bold;'>Frage {st.session_state.current_question + 1}/{st.session_state.questions_per_batch}</h2>",
             unsafe_allow_html=True
         )
-        st.markdown(f"<h4>Current Score: {st.session_state.total_score} points</h4>", unsafe_allow_html=True)
+        st.markdown(f"<h4>Aktuelle Punktzahl: {st.session_state.total_score} Punkte</h4>", unsafe_allow_html=True)
         st.markdown("---")
 
         # Wrap the question in the styled div
         st.markdown(
             f"""
             <div class="question-container">
-                <p>{question.question_easy if st.session_state.quiz_mode == 'Easy' else question.question_hard}</p>
+                <p>{question.question_easy if st.session_state.quiz_mode == 'Einfach' else question.question_hard}</p>
             </div>
             """, unsafe_allow_html=True
         )
 
-        image_url = question.image_url_easy if st.session_state.quiz_mode == "Easy" else question.image_url_hard
+        image_url = question.image_url_easy if st.session_state.quiz_mode == "Einfach" else question.image_url_hard
         if image_url:
             # Display the image and ensure it adjusts to screen width
-            st.image(image_url, use_column_width=True, caption=f"{st.session_state.quiz_mode} Mode Spectrum")
+            st.image(image_url, use_container_width=True, caption=f"{st.session_state.quiz_mode} Modus Spektrum")
 
-        user_answer = st.radio("Select your answer:", question.options)
-        submitted = st.button("Submit Answer")
+        user_answer = st.radio("Wählen Sie Ihre Antwort:", question.options)
+        submitted = st.button("Antwort einreichen")
 
         # Check if the question has already been answered
         question_answered = "question_answered" in st.session_state and st.session_state.question_answered
@@ -406,10 +406,10 @@ class QuizApp:
             time_taken = time.time() - st.session_state.start_time
 
             if is_correct:
-                st.success("🎉 Correct! Great job!")
+                st.success("🎉 Richtig! Gute Arbeit!")
                 st.session_state.total_score += 1
             else:
-                st.error(f"❌ Incorrect. The correct answer was: {question.correct_answer}")
+                st.error(f"❌ Falsch. Die richtige Antwort war: {question.correct_answer}")
 
             # Save the quiz result
             self.save_quiz_result(question.id, user_answer, is_correct, time_taken)
@@ -419,7 +419,7 @@ class QuizApp:
 
         # Add a "Next" button to move to the next question
         if st.session_state.question_answered:
-            if st.button("Next"):
+            if st.button("Weiter"):
                 st.session_state.current_question += 1
                 st.session_state.start_time = time.time()
                 st.session_state.question_answered = False
@@ -427,10 +427,10 @@ class QuizApp:
 
     def save_quiz_result(self, question_id: int, user_answer: str, is_correct: bool, time_taken: float):
         """
-        Save the quiz result to the database
+        Speichern Sie das Quiz-Ergebnis in der Datenbank
         """
         if not st.session_state.user_id:
-            st.error("User not registered. Cannot save quiz result.")
+            st.error("Benutzer nicht registriert. Quiz-Ergebnis kann nicht gespeichert werden.")
             return
 
         try:
@@ -462,12 +462,12 @@ class QuizApp:
 
                 conn.commit()
         except sqlite3.Error as e:
-            logging.error(f"Database error when saving quiz result: {e}")
-            st.error("An error occurred while saving your quiz result.")
+            logging.error(f"Datenbankfehler beim Speichern des Quiz-Ergebnisses: {e}")
+            st.error("Ein Fehler ist aufgetreten, während Ihr Quiz-Ergebnis gespeichert wurde.")
 
     def register_user(self, name: str) -> bool:
         """
-        Register a new user in the database
+        Registrieren Sie einen neuen Benutzer in der Datenbank
         """
         if not name:
             return False
@@ -486,12 +486,12 @@ class QuizApp:
                     # Name already exists
                     return False
         except sqlite3.IntegrityError:
-            logging.error(f"Failed to register user: {name}")
+            logging.error(f"Registrierung des Benutzers fehlgeschlagen: {name}")
             return False
 
     def get_user_id(self, name: str) -> Optional[int]:
         """
-        Retrieve the user ID for a given name
+        Benutzer-ID für einen gegebenen Namen abrufen
         """
         try:
             with self.db.get_connection() as conn:
@@ -500,12 +500,12 @@ class QuizApp:
                 result = c.fetchone()
                 return result[0] if result else None
         except sqlite3.Error as e:
-            logging.error(f"Error retrieving user ID: {e}")
+            logging.error(f"Fehler beim Abrufen der Benutzer-ID: {e}")
             return None
 
     def reset_quiz(self):
         """
-        Reset the quiz state to its initial configuration
+        Setzen Sie den Quiz-Zustand auf seine ursprüngliche Konfiguration zurück
         """
         # Reset all session state variables
         st.session_state.quiz_started = False
@@ -520,7 +520,7 @@ class QuizApp:
 
     def show_leaderboard(self):
         """
-        Display the leaderboard with top performers
+        Leaderboard anzeigen
         """
         st.title("🏆 Leaderboard")
 
@@ -538,10 +538,10 @@ class QuizApp:
                 ''', conn)
 
                 if df.empty:
-                    st.info("No data available yet. Start playing to appear on the leaderboard!")
+                    st.info("Noch keine Daten verfügbar. Beginnen Sie zu spielen, um auf der Leaderboard zu erscheinen!")
                 else:
                     # Rename columns for clarity
-                    df.columns = ['Player', 'Total Points']
+                    df.columns = ['Spieler', 'Gesamtpunkte']
 
                     # Set index starting from 1
                     df.index += 1
@@ -551,22 +551,22 @@ class QuizApp:
 
                     # Optional: Visualize top performers
                     fig = go.Figure(data=[go.Bar(
-                        x=df['Player'], 
-                        y=df['Total Points'], 
-                        text=df['Total Points'],
+                        x=df['Spieler'], 
+                        y=df['Gesamtpunkte'], 
+                        text=df['Gesamtpunkte'],
                         textposition='auto',
                     )])
                     fig.update_layout(
-                        title='Top Performers',
-                        xaxis_title='Players',
-                        yaxis_title='Total Points',
+                        title='Top-Spieler',
+                        xaxis_title='Spieler',
+                        yaxis_title='Gesamtpunkte',
                         font=dict(size=12)  # Adjust font size in the plot here
                     )
                     st.plotly_chart(fig)
 
         except sqlite3.Error as e:
-            logging.error(f"Error fetching leaderboard: {e}")
-            st.error("Unable to retrieve leaderboard data.")
+            logging.error(f"Fehler beim Abrufen der Leaderboard: {e}")
+            st.error("Leaderboardn-Daten können nicht abgerufen werden.")
 
 def main():
     quiz_app = QuizApp()
