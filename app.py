@@ -591,10 +591,15 @@ class QuizApp:
             logging.error(f"Fehler beim Abrufen der Benutzer-ID: {e}")
             return None
         
+    from streamlit_autorefresh import st_autorefresh
+
     def show_leaderboard(self):
         """
         Display the leaderboard with unique entries per user.
         """
+        # Add an autorefresh to the leaderboard page
+        count = st_autorefresh(interval=5000, key="leaderboard_refresh")
+
         st.title("🏆 Leaderboard")
 
         try:
@@ -625,6 +630,7 @@ class QuizApp:
         except sqlite3.Error as e:
             logging.error(f"Fehler beim Abrufen der Leaderboard: {e}")
             st.error("Leaderboard-Daten können nicht abgerufen werden.")
+
 
 def main():
     quiz_app = QuizApp()
