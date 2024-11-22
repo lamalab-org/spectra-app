@@ -594,6 +594,7 @@ class QuizApp:
     from streamlit_autorefresh import st_autorefresh
 
     def show_leaderboard(self):
+
         """
         Display the leaderboard with unique entries per user, including predefined scores for the model, highlighted.
         """
@@ -637,10 +638,10 @@ class QuizApp:
                 # Set index starting from 1
                 df.index = range(1, len(df) + 1)
 
-                # Highlight predefined models
+                # Highlight predefined models with softer purple and adjust text color
                 def highlight_models(row):
                     if row['Spieler'] in predefined_scores['Spieler'].values:
-                        return ['background-color: yellow'] * len(row)
+                        return ['background-color: #CBC3E3; color: black'] * len(row)  # Softer purple with black text
                     else:
                         return [''] * len(row)
 
@@ -652,6 +653,7 @@ class QuizApp:
         except sqlite3.Error as e:
             logging.error(f"Fehler beim Abrufen der Leaderboard: {e}")
             st.error("Leaderboard-Daten können nicht abgerufen werden.")
+
 
 def main():
     quiz_app = QuizApp()
