@@ -595,12 +595,19 @@ class QuizApp:
 
     def show_leaderboard(self):
         """
-        Display the leaderboard with unique entries per user.
+        Display the leaderboard with unique entries per user, including predefined scores for the model, highlighted.
         """
         # Add an autorefresh to the leaderboard page
         count = st_autorefresh(interval=5000, key="leaderboard_refresh")
 
         st.title("🏆 Leaderboard")
+
+        # Predefined scores for demonstration or model
+        predefined_scores = pd.DataFrame({
+            "Spieler": ["GPT", "Llama", "Claude", "Gemini"],
+            "Gesamtpunkte": [2, 2, 1, 1],
+            "Gesamtzeit": [0, 0, 0, 0]  # Time in seconds
+        })
 
         try:
             with self.db.get_connection() as conn:
@@ -617,20 +624,34 @@ class QuizApp:
 
                 if df.empty:
                     st.info("Noch keine Daten verfügbar. Beginnen Sie zu spielen, um auf der Leaderboard zu erscheinen!")
+                    df = predefined_scores  # Only show predefined scores if no data exists
                 else:
                     # Format the total time from seconds to MM:SS
                     df['Gesamtzeit'] = df['Gesamtzeit'].apply(lambda x: self.format_time(x))
 
-                    # Set index starting from 1
-                    df.index += 1
+                    # Combine predefined scores with actual data
+                    df = pd.concat([df, predefined_scores]).sort_values(
+                        by=["Gesamtpunkte", "Gesamtzeit"], ascending=[False, True]
+                    )
 
-                    # Display leaderboard with styling
-                    st.table(df)
+                # Set index starting from 1
+                df.index = range(1, len(df) + 1)
 
+                # Highlight predefined models
+                def highlight_models(row):
+                    if row['Spieler'] in predefined_scores['Spieler'].values:
+                        return ['background-color: yellow'] * len(row)
+                    else:
+                        return [''] * len(row)
+
+                # Apply styling
+                styled_df = df.style.apply(highlight_models, axis=1)
+
+                # Display leaderboard with styling
+                st.dataframe(styled_df, use_container_width=True)
         except sqlite3.Error as e:
             logging.error(f"Fehler beim Abrufen der Leaderboard: {e}")
             st.error("Leaderboard-Daten können nicht abgerufen werden.")
-
 
 def main():
     quiz_app = QuizApp()
